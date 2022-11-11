@@ -2,6 +2,7 @@ import { chromium } from "playwright";
 import fetch from "node-fetch";
 import * as dotenv from "dotenv";
 import { writeFile } from "fs/promises";
+import { setInterval } from "timers/promises";
 
 dotenv.config();
 
@@ -51,4 +52,10 @@ const crawlEnecoUsage = async () => {
   await browser.close();
 };
 
-crawlEnecoUsage().then(() => console.log("Done"));
+for await (const startTime of setInterval(
+  process.env.SCRAPE_INTERVAL_MINUTES * 60 * 1000
+)) {
+  crawlEnecoUsage().then(() =>
+    console.log(`Executed crawling round at: ${new Date()}`)
+  );
+}
