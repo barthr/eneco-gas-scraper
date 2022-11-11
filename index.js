@@ -10,7 +10,7 @@ const usage = async (page) => {
 
   const currentDate = new Date();
   const start = `${currentDate.getFullYear()}-1-1`;
-  const url = `https://api-digital.enecogroup.com/v1/enecoweb/v2/eneco/customers/43863032/accounts/2/usages?aggregation=Year&interval=Month&start=${start}&addBudget=false&addWeather=false&extrapolate=false`;
+  const url = `https://api-digital.enecogroup.com/v1/enecoweb/v2/eneco/customers/${process.env.ENECO_ID}/accounts/2/usages?aggregation=Year&interval=Month&start=${start}&addBudget=false&addWeather=false&extrapolate=false`;
 
   const response = await fetch(url, {
     headers: {
