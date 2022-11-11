@@ -1,10 +1,10 @@
 FROM ubuntu
 
 # update 
-RUN apt-get update && apt-get upgrade -y
-RUN apt-get install curl -y
+RUN apt update && apt upgrade -y
+RUN apt install curl -y
 RUN curl -sL https://deb.nodesource.com/setup_16.x | bash
-RUN apt-get install nodejs -y
+RUN apt install nodejs -y
 RUN node -v
 RUN npm -v
 
