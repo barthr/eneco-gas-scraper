@@ -1,61 +1,78 @@
-import { chromium } from "playwright";
-import fetch from "node-fetch";
 import * as dotenv from "dotenv";
-import { writeFile } from "fs/promises";
+import { readFile } from "fs/promises";
 import { setInterval } from "timers/promises";
+import express from "express";
+import {
+  retrieveCurrentEnergyPrice,
+  retrieveUsageThisPeriod,
+} from "./tibber.mjs";
+import { crawlEnecoUsage } from "./eneco.mjs";
 
 dotenv.config();
 
-const usage = async (page) => {
-  var secrets = await page.evaluate("window.__SSR_CONTEXT__.globalKeys");
+const enecoUsageFile = process.env.RESULTS_DIRECTORY + "/usage.json";
+const app = express();
+const port = process.env.PORT;
 
-  const currentDate = new Date();
-  const start = `${currentDate.getFullYear()}-1-1`;
-  const url = `https://api-digital.enecogroup.com/v1/enecoweb/v2/eneco/customers/${process.env.ENECO_ID}/accounts/2/usages?aggregation=Year&interval=Month&start=${start}&addBudget=false&addWeather=false&extrapolate=false`;
+app.get("/gas/crawl", async (_, res) => {
+  await crawlEnecoUsage(enecoUsageFile);
+  res.json({ success: true });
+});
 
-  const response = await fetch(url, {
-    headers: {
-      Authorization: secrets["my"]["secret"],
-      apikey: secrets["digitalCore"]["private"],
+app.get("/energy/summary", async (_, res) => {
+  const enecoUsage = JSON.parse(await readFile(enecoUsageFile));
+
+  const month = new Date().getMonth();
+  const gasUsageThisPeriod =
+    enecoUsage.data.usages[0].entries[month].actual.gas;
+
+  const energyCurrentPrice = await retrieveCurrentEnergyPrice();
+  const energyPeriodUsage = await retrieveUsageThisPeriod(
+    new Date().getDate() - 1
+  ); // Adjust for 0 based index (this is the actual start of the month)
+
+  res.json({
+    gas: {
+      month: month + 1,
+      usage: gasUsageThisPeriod.high,
+      usageUnit: "\u33A5",
+      totalCost: gasUsageThisPeriod.totalCostInclVat,
+      price: gasUsageThisPeriod.totalUsageCostInclVat / gasUsageThisPeriod.high,
+      costUnit: "\u20AC",
+    },
+    electricity: {
+      month: {
+        month: month + 1,
+        usage: energyPeriodUsage.data.viewer.homes[0].consumption.nodes.reduce(
+          (acc, item) => acc + item.consumption,
+          0.0
+        ),
+        usageUnit: "kWh",
+        totalCost:
+          energyPeriodUsage.data.viewer.homes[0].consumption.nodes.reduce(
+            (acc, item) => acc + item.cost,
+            0.0
+          ),
+        costUnit: "\u20AC",
+      },
+      current: {
+        price:
+          energyCurrentPrice.data.viewer.homes[0].currentSubscription.priceInfo
+            .current.total,
+        unit: "\u20AC",
+      },
     },
   });
-  return response.json();
-};
+});
 
-const crawlEnecoUsage = async () => {
-  const browser = await chromium.launch({
-    headless: true, // Show the browser.
-  });
+app.listen(port, () => {
+  console.log(`Energy dashboard listening on port ${port}`);
+});
 
-  const page = await browser.newPage();
-  await page.goto("https://inloggen.eneco.nl/");
-  await page.fill('input[name="username"]', process.env.ENECO_USERNAME);
-  await page.click("input[type='submit']");
-  await page.fill('input[name="password"]', process.env.ENECO_PASSWORD);
-  await page.click("input[type='submit']");
-  await page.waitForTimeout(10000);
-
-  const enecoUsage = await usage(page);
-
-  const gasUsage =
-    enecoUsage.data.usages[0].entries[new Date().getMonth()].actual.gas
-      .totalUsageCostInclVat;
-
-  console.log(`Gas usage this month: € ${gasUsage}`);
-
-  // write response to file
-  await writeFile(
-    process.env.RESULTS_DIRECTORY + "/usage.json",
-    JSON.stringify(enecoUsage)
-  );
-
-  await browser.close();
-};
-
-for await (const startTime of setInterval(
+for await (const _startTime of setInterval(
   process.env.SCRAPE_INTERVAL_MINUTES * 60 * 1000
 )) {
-  crawlEnecoUsage().then(() =>
+  crawlEnecoUsage(enecoUsageFile).then(() =>
     console.log(`Executed crawling round at: ${new Date()}`)
   );
 }
