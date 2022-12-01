@@ -37,7 +37,8 @@ app.get("/energy/summary", async (_, res) => {
       usage: gasUsageThisPeriod.high,
       usageUnit: "\u33A5",
       totalCost: gasUsageThisPeriod.totalCostInclVat,
-      price: gasUsageThisPeriod.totalUsageCostInclVat / gasUsageThisPeriod.high,
+      price:
+        gasUsageThisPeriod.totalUsageCostInclVat / gasUsageThisPeriod.high ?? 0,
       costUnit: "\u20AC",
     },
     electricity: {
